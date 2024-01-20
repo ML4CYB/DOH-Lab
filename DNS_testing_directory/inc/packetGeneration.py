@@ -86,7 +86,7 @@ options.add_argument('--disable-dev-shm-usage')
 service = Service()
 driver = webdriver.Chrome(service=service, options=options)
 
-# Loops though 1000 different times to generate pacets
+# Loops though 1000 different times to generate packets
 for i in range(1000):
 #------------------------------------------------------------------------------------------------------
 #                                     Post Lab Exercise
