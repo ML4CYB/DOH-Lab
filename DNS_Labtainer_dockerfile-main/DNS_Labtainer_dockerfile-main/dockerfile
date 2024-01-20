@@ -1,0 +1,179 @@
+#
+# Labtainer Dockerfile
+#
+#  This is the default Labtainer Dockerfile template, plesae choose the appropriate
+#  base image below.
+#
+# The labtainer.base image includes the following packages:
+#    build-essential  expect  file  gcc-multilib  gdb  iputils-ping  less  man  manpages-dev 
+#    net-tools  openssh-client  python  sudo  tcl8.6  vim  zip  hexedit  rsyslog
+#
+# The labtainer.network image adds the following packages:
+#   openssl openssh-server openvpn wget tcpdump  update-inetd  xinetd
+#
+ARG registry
+FROM $registry/labtainer.base2
+#FROM $registry/labtainer.network
+#FROM $registry/labtainer.centos
+#FROM $registry/labtainer.lamp
+#
+#  lab is the fully qualified image name, e.g., mylab.some_container.student
+#  labdir is the name of the lab, e.g., mylab 
+#  imagedir is the name of the container
+#  user_name is the USER from the start.config, if other than ubuntu,
+#            then that user must be added in this dockerfile
+#            before the USER command
+#
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+RUN /usr/bin/apt-source.sh
+#
+#  	put package installation here, e.g.,
+#     RUN apt-get update && apt-get install -y --no-install-recommends somepackage
+#
+#
+#
+# Install the system files found in the _system directory
+#
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+#
+RUN useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+# replace above with below for centos/fedora
+#RUN usermod $user_name -a -G wheel
+
+
+#  **** Perform all root operations, e.g.,           ****
+
+#--------------------------------------------------------------------------------
+# This part of the dockerfile is used to install some basic programs and libraries
+# like wget curl, git, that later get used in the program
+#--------------------------------------------------------------------------------
+RUN apt-get update -y && \
+    python3 -m pip install --upgrade pip && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    curl \  
+    locales \
+    git \
+    gpg \
+    wget \ 
+    software-properties-common && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/lib/apt/lists/*
+
+
+#--------------------------------------------------------------------------------
+# This part of the program installs python 3.7. The version that is already
+# installed was 3.8.5 which some of the libaries and programs used are incompatable
+# with that version of python. This part downgrades the version of python from
+# 3.8.5 to 3.7
+#--------------------------------------------------------------------------------
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt update
+RUN apt install python3.7 -y
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2 && \
+    update-alternatives --config python3
+
+RUN apt install python3.7-distutils -y
+
+
+#--------------------------------------------------------------------------------
+# This part of the program installs some other libraries that are used within the
+# program like numpy, scapy, pandas and upgrades a few more.
+#--------------------------------------------------------------------------------
+# Install all required pip modules/etc
+RUN pip3 install numpy==1.18 && \
+    pip3 install scapy==2.4.3 && \
+    pip3 install pandas && \
+    pip install --upgrade urllib3 && \
+    pip install --upgrade chardet && \
+    pip install --upgrade requests
+
+#--------------------------------------------------------------------------------
+# This part sets the size limit of downloadable files to unlimited. This is since
+# the next package being installed was larger than the origional requirement.
+#--------------------------------------------------------------------------------
+RUN ulimit -f unlimited
+
+#--------------------------------------------------------------------------------
+# This part installs the next packages needed in the program with the main one
+# being tensorflow 2.1.0
+#--------------------------------------------------------------------------------
+RUN apt install python3.7-distutils -y
+
+RUN sudo pip3 install --ignore-installed --upgrade https://files.pythonhosted.org/packages/1d/56/0dbdae2a3c527a119bec0d5cf441655fe030ce1daa6fa6b9542f7dbd8664/tensorflow-2.1.0-cp37-cp37m-manylinux2010_x86_64.whl
+
+
+#
+#  **** Perform all root operations, e.g.,           ****
+#  **** "apt-get install" prior to the USER command. ****
+#
+USER $user_name
+ENV HOME /home/$user_name
+#
+# Install files in the user home directory
+#
+
+#--------------------------------------------------------------------------------
+# This part pulls 2 directories from github. The first being the DoHlyzer which
+# is the program used to analyze the .pcap file full of packet data and produce
+# a .csv file showcasing the data in a human readable format. The next directory
+# is the code for the packet generation.
+#--------------------------------------------------------------------------------
+
+RUN cd /home/$user_name && git clone --depth 1 https://github.com/ahlashkari/DoHlyzer
+RUN cd /home/$user_name && git clone --depth 1 https://github.com/Tjudd04/DNS_testing.git
+
+#--------------------------------------------------------------------------------
+
+# This part installs some last libraries and packages that are insalled in the 
+# requirements.txt in the DoHlyzer directory as well as moving the setup.py
+# from the DNS_testing directory to the DoHlyzer directory where it is used
+# to set up the DoHlyzer.
+
+# Finally the last part removes the packet_flow_key.py and replaces it with an
+# updated version. This is since the version installed with doHlyzer is not
+# compatiable with the labtainers environment so it is replaced with one that
+# works within the environment.
+#--------------------------------------------------------------------------------
+
+
+RUN cd /home/$user_name/DoHlyzer && sudo pip3 install -r requirements.txt
+
+RUN cd /home/$user_name/DNS_testing/inc && sudo mv setup.py /home/$user_name/DoHlyzer
+ 
+RUN cd /home/$user_name/DoHlyzer && sudo pip3 install .
+
+RUN cd /usr/local/lib/python3.7/dist-packages/meter/features/context/ && sudo rm packet_flow_key.py
+
+RUN cd /home/$user_name/DNS_testing && sudo mv packet_flow_key.py /usr/local/lib/python3.7/dist-packages/meter/features/context/
+
+RUN sudo apt update && \
+sudo apt install firefox -y && \
+pip install notebook && \
+pip install pydotplus && \
+pip install --upgrade scikit-learn && \
+sudo apt-get install graphviz -y
+
+
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+# remove after docker fixes problem with empty tars
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+#
+#  The first thing that executes on the container.
+#
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+RUN cd /home/$user_name/DNS_testing/inc
