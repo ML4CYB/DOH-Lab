@@ -96,6 +96,7 @@ RUN apt install python3.7-distutils -y
 RUN pip3 install numpy==1.18 && \
     pip3 install scapy==2.4.3 && \
     pip3 install pandas && \
+    pip3 install seaborn && \
     pip install --upgrade urllib3 && \
     pip install --upgrade chardet && \
     pip install --upgrade requests
